@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-FlashRT Thor — LIBERO benchmark.
+LIBERO benchmark harness (runs on RTX 5090 / SM120).
+
+Origin: FlashRT examples/thor/eval_libero.py — their shared LIBERO eval, which their
+Blackwell docs designate as the canonical script for RTX 5090 ("runs unchanged").
+Our modifications: HYBRID=1 runs our hybrid stack via src/pi05/hybrid_model.py;
+--trial_offset for chunked runs; per-step stall watchdog; osmesa rendering; the
+Jetson-only EGL cleanup patch disabled (leaks sim contexts on x86).
 
 Usage:
     # Quick test (3 tasks x 3 episodes):
