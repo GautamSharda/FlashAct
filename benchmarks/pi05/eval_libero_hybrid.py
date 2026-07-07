@@ -160,7 +160,7 @@ def eval_single_task(args, task_id):
     import os as _os
     if _os.environ.get("HYBRID") == "1":
         import sys as _s
-        _s.path.insert(0, _HERE)
+        _s.path.insert(0, __import__('os').path.join(_HERE, "../../src/pi05"))
         import hybrid_model as flash_rt
     else:
         import flash_rt

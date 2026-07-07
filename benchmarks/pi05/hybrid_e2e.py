@@ -1,14 +1,15 @@
 """Hybrid fastest-e2e pi0.5: FlashRT FP8 front-end (vision+encoder, CUDA graph)
 feeding OUR single-kernel FP8 megakernel denoise loop. Measured like their wall."""
 _HERE = __import__('os').path.dirname(__import__('os').path.abspath(__file__))
+_KERN = __import__('os').path.join(_HERE, "../../src/pi05")
 import ctypes, json, os, sys, time
 import numpy as np
 import torch
-sys.path.insert(0, _HERE)
-sys.path.insert(0, _HERE)
+sys.path.insert(0, _KERN)
+sys.path.insert(0, _KERN)
 from torch.utils.cpp_extension import load
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../src/pi05")
 NB, NT = 170, 256
 D, H, HD, F, NL, T, AD, QD = 1024, 8, 256, 4096, 18, 16, 32, 2048
 TV = 10

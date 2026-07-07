@@ -1,9 +1,10 @@
 """mk6 FP8 megakernel on pi05_libero (horizon 10), FlashRT-comparable scenario."""
 _HERE = __import__('os').path.dirname(__import__('os').path.abspath(__file__))
+_KERN = __import__('os').path.join(_HERE, "../../src/pi05")
 import json, os, sys, time
 sys.path.insert(0, __import__('os').path.join(_HERE, "../../third_party/openpi/src"))
-sys.path.insert(0, _HERE)
-sys.path.insert(0, _HERE)
+sys.path.insert(0, _KERN)
+sys.path.insert(0, _KERN)
 import numpy as np
 import torch
 from torch.utils.cpp_extension import load
@@ -11,7 +12,7 @@ import openpi.models.pi0_config as pi0_config
 from openpi.models_pytorch.pi0_pytorch import PI0Pytorch, make_att_2d_masks
 import pack_weights as pw
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../src/pi05")
 NB, NT = 170, 256
 D, H, HD, F, NL, T, AD, QD = 1024, 8, 256, 4096, 18, 16, 32, 2048
 TV = 10

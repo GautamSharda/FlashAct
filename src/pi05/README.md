@@ -43,6 +43,8 @@ mujoco 3.1.6 for the eval. Data paths (override via env):
 - `MK_PYTHON` — python for eval subprocesses (needs the full stack above)
 
 ```bash
+cd ../../benchmarks/pi05  # benchmarks live here
+
 # e2e latency (idle GPU): prints hybrid + FlashRT wall p50
 python hybrid_e2e.py
 
