@@ -27,10 +27,15 @@ FP8 action-decoder path (10.2 ms) with tighter numerics.
 | `binding.cpp` | PyTorch extension binding (launch signature, dynamic smem) |
 | `pack_weights.py` | weight packing/quantization + RoPE tables + KV compaction |
 | `hybrid_model.py` | the deployable hybrid: FlashRT-compatible `predict(images, prompt)`; captures their vision+encoder as an encoder-only CUDA graph, hands enc_K/enc_V to the kernel |
-| `hybrid_e2e.py` | e2e latency benchmark: hybrid vs FlashRT full-FP8, same process, CUDA-synced wall p50 |
-| `run_libero.py` | standalone loop benchmark + correctness gate vs bf16 openpi reference (cos 0.99995) |
-| `eval_libero_hybrid.py` | LIBERO eval harness (FlashRT's `eval_libero.py` + `HYBRID=1` switch, `--trial_offset`, per-step stall watchdog, osmesa) |
-| `chunked_eval.sh` | eval driver: 15 trials per subprocess (LIBERO's sim hangs after ~18 env resets per process on x86+osmesa), resumable per-chunk JSONs, final aggregate |
+
+Benchmarks and the LIBERO eval live in `benchmarks/pi05/`:
+
+| file | what it is |
+|---|---|
+| `benchmarks/pi05/hybrid_e2e.py` | e2e latency benchmark: hybrid vs FlashRT full-FP8, same process, CUDA-synced wall p50 |
+| `benchmarks/pi05/run_libero.py` | standalone loop benchmark + correctness gate vs bf16 openpi reference (cos 0.99995) |
+| `benchmarks/pi05/eval_libero_hybrid.py` | LIBERO eval harness (FlashRT's `eval_libero.py` + `HYBRID=1` switch, `--trial_offset`, per-step stall watchdog, osmesa) |
+| `benchmarks/pi05/chunked_eval.sh` | eval driver: 15 trials per subprocess (LIBERO's sim hangs after ~18 env resets per process on x86+osmesa), resumable per-chunk JSONs, final aggregate |
 
 ## Running
 
