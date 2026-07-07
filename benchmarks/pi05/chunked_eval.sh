@@ -19,7 +19,7 @@ for TID in 0 1 2 3 4 5 6 7 8 9; do
     echo "=== task $TID offset $OFF n $N ===" >> "$LOG"
     _FLASHVLA_SUBTASK_OUTPUT="$CH" PATH=/network_volume/megakernels/venv/bin:$PATH PYTHONPATH=/network_volume/megakernels/LIBERO \
       TORCH_EXTENSIONS_DIR=/root/extbuild \
-      timeout 3000 "$PY" eval_libero_hybrid.py --checkpoint "$CKPT" \
+      timeout 3000 "$PY" eval_libero.py --checkpoint "$CKPT" \
         --task_suite libero_spatial --framework torch --seed 1 \
         --num_trials $N --trial_offset $OFF --_task_id $TID >> "$LOG" 2>&1
     echo "chunk exit: $?" >> "$LOG"
