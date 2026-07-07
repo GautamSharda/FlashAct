@@ -33,7 +33,7 @@ Benchmarks and the LIBERO eval live in `benchmarks/pi05/`:
 | file | what it is |
 |---|---|
 | `benchmarks/pi05/hybrid_e2e.py` | e2e latency benchmark: hybrid vs FlashRT full-FP8, same process, CUDA-synced wall p50 |
-| `benchmarks/pi05/run_libero.py` | standalone loop benchmark + correctness gate vs bf16 openpi reference (cos 0.99995) |
+| `benchmarks/pi05/bench_correctness.py` | standalone loop benchmark + correctness gate vs bf16 openpi reference (cos 0.99995) |
 | `benchmarks/pi05/eval_libero_hybrid.py` | LIBERO eval harness (FlashRT's `eval_libero.py` + `HYBRID=1` switch, `--trial_offset`, per-step stall watchdog, osmesa) |
 | `benchmarks/pi05/chunked_eval.sh` | eval driver: 15 trials per subprocess (LIBERO's sim hangs after ~18 env resets per process on x86+osmesa), resumable per-chunk JSONs, final aggregate |
 
@@ -54,7 +54,7 @@ cd ../../benchmarks/pi05  # benchmarks live here
 python hybrid_e2e.py
 
 # standalone loop benchmark + correctness vs bf16 reference
-python run_libero.py
+python bench_correctness.py
 
 # LIBERO spatial, 500 trials per stack
 bash chunked_eval.sh flashrt            # baseline
