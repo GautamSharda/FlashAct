@@ -1,17 +1,17 @@
 {
- "e2e_eager_ms_p50": 653.3197686076164,
- "e2e_cudagraph_ms_p50": 181.72741774469614,
- "e2e_megakernel_ms_p50": 135.8541315421462,
- "speedup_vs_eager": 4.808979757858421,
- "speedup_vs_cudagraph": 1.3376657425270766,
- "cos_mk_vs_eager": 0.9999966621398926,
+ "e2e_eager_ms_p50": 204.886756837368,
+ "e2e_cudagraph_ms_p50": 139.26828978583217,
+ "e2e_megakernel_ms_p50": 90.8569898456335,
+ "speedup_vs_eager": 2.255046718865237,
+ "speedup_vs_cudagraph": 1.532829670259269,
+ "cos_mk_vs_eager": 0.9999977946281433,
  "cos_cudagraph_vs_eager": 1.0000001192092896,
  "actions_eager_row0": [
-  -0.0869140625,
+  -0.06494140625,
   45.25,
   35.5,
   4.9375,
-  -0.8984375,
+  -1.0078125,
   -0.03759765625
  ],
  "actions_mk_row0": [

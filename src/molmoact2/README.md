@@ -9,32 +9,31 @@ Model: `allenai/MolmoAct2-SO100_101` (5B Molmo2-ER backbone + 36-layer/768-hidde
 action expert), bf16. Scenario: 2 RealSense views, SO100 6-dim state, ~493 valid
 VLM context tokens, horizon 30, 10 flow steps, batch 1.
 
-## Results
+## Results (RTX 5090, sm_120, 170 SMs)
 
-Flow loop (batch 1, RTX 5090 / 170 SMs):
+Flow loop (batch 1, same-run pair from `eval_numerics.py`):
 
-| impl | loop p50 | speedup | cos vs eager |
-|---|---|---|---|
-| HF eager loop (with the model's own cached modulations) | 148.2 ms | 1.0× | — |
-| **megakernel** | **30.84 ms** | **4.80×** | 0.9999975 |
+| impl | loop p50 | speedup | cos vs eager | max abs diff |
+|---|---|---|---|---|
+| HF eager loop (model's own cached modulations) | 201.4 ms | 1.0x | -- | -- |
+| **megakernel** | **30.75 ms** | **6.5x** | 0.999997 | 0.0055 |
 
-End-to-end `predict_action` (same inputs, same boundary — preprocessing + backbone
-prefill + flow loop + unnormalize), measured by `benchmarks/molmoact2/eval_e2e.py`,
-which replaces only `_run_action_flow_loop` with the megakernel. Measured on an
-RTX PRO 4500 Blackwell (82 SMs) — smaller than a 5090, so absolute times are
-conservative; the three paths are compared on identical hardware:
+The eager loop is host-dispatch-bound (148-590 ms across pods depending on CPU);
+the megakernel is GPU-bound and stable (~30.8 ms on every full 5090 tested).
+
+End-to-end `predict_action` (preprocessing + backbone prefill + flow loop +
+unnormalize, identical inputs, back-to-back on the same box) from `eval_e2e.py`,
+which replaces only `_run_action_flow_loop` with the megakernel:
 
 | path | e2e p50 | speedup | cos vs eager |
 |---|---|---|---|
-| HF eager | 653.3 ms | 1.0x | -- |
-| authors CUDA-graph (their best published technique) | 181.7 ms | 3.6x | 1.000000 |
-| **megakernel** | **135.9 ms** | **4.8x** (1.34x vs CUDA-graph) | 0.999997 |
+| HF eager | 204.9 ms | 1.0x | -- |
+| authors' CUDA-graph (their best published technique) | 139.3 ms | 1.47x | 1.000000 |
+| **megakernel** | **90.9 ms** | **2.26x** (**1.53x vs CUDA-graph**) | 0.9999978 |
 
-Absolute e2e times depend on the host CPU (the unchanged backbone prefill is
-dispatch-bound) and GPU size; the loop-level numbers are the stable comparison.
-All three paths measured back-to-back on the same box and inputs
-(`e2e_results.json`). The launch grid auto-clamps to cooperative capacity, so the
-kernel runs on any sm_120 part.
+Raw outputs: `benchmarks/molmoact2/results.json`, `benchmarks/molmoact2/e2e_results.json`.
+The launch grid auto-clamps to cooperative capacity, so the kernel also runs on
+smaller sm_120 parts (verified on an 82-SM RTX PRO 4500: 1.34x vs CUDA-graph).
 
 Only the flow loop is our contribution — the backbone prefill runs the model's
 unmodified HF code in all paths.
