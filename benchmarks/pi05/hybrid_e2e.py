@@ -159,12 +159,23 @@ def mk():
 
 from flash_rt.core.utils.actions import unnormalize_actions
 cur = torch.cuda.current_stream().cuda_stream
+hybrid_internal_ms = []
+
 def hybrid_predict():
+    # internal boundary = FlashRT's internal_ms definition: staging + graph replay +
+    # raw-output readback, EXCLUDING outer image preprocessing and unnormalize.
+    # Their infer() appends its own record (noise+image staging + encoder graph + sync);
+    # we add the KV grab + megakernel + x_t readback on top.
+    n0 = len(fe.latency_records)
     model.predict(images, prompt, state=state)      # staging + encoder-only graph
+    t0i = time.perf_counter()
     grab_kv(ctypes.c_void_p(cur))
     x_t[:TV] = noise_t
     mk()
-    raw = x_t[:TV, :].float().cpu().numpy()
+    raw = x_t[:TV, :].float().cpu().numpy()         # includes readback sync
+    mk_ms = (time.perf_counter() - t0i) * 1000.0
+    if len(fe.latency_records) > n0:
+        hybrid_internal_ms.append(fe.latency_records[-1] + mk_ms)
     return unnormalize_actions(raw, fe.norm_stats)
 
 torch.manual_seed(42)
@@ -179,6 +190,8 @@ for _ in range(50):
     ts.append((time.perf_counter() - t0) * 1000)
 ts.sort()
 res = {"hybrid_wall_p50_ms": ts[len(ts)//2], "hybrid_min_ms": ts[0], "Lp": Lp}
+hi = sorted(hybrid_internal_ms[-len(ts):])
+res["hybrid_internal_p50_ms"] = hi[len(hi)//2] if hi else None
 print(json.dumps(res, indent=1))
 np.save(f"{HERE}/hybrid_actions.npy", np.asarray(acts))
 
@@ -214,6 +227,8 @@ a_h = np.asarray(acts).reshape(10, -1)[:, :nd].ravel()
 a_t = a_t.ravel()
 cosv = float(np.dot(a_h, a_t) / (np.linalg.norm(a_h) * np.linalg.norm(a_t) + 1e-9))
 res["flashrt_full_fp8_wall_p50_ms"] = ts2[len(ts2)//2]
+fi = sorted(list(fe.latency_records)[-len(ts2):])
+res["flashrt_internal_p50_ms"] = fi[len(fi)//2] if fi else None
 res["cos_hybrid_vs_flashrt_full"] = cosv
 res["max_diff"] = float(np.abs(a_h - a_t).max())
 print(json.dumps(res, indent=1))
