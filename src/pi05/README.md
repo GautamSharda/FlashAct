@@ -19,6 +19,24 @@ prompts, seeds, and measurement boundary. Loop fidelity vs the bf16 openpi
 reference: cosine 0.99995. The standalone loop (9.5 ms) also beats FlashRT's
 FP8 action-decoder path (10.2 ms) with tighter numerics.
 
+## Boundary note: FlashRT's 17.58 ms vs these numbers
+
+FlashRT's README headline (17.58 ms, 2-view) is its *internal* figure — staging +
+graph replay + raw-action readback; the same README footnotes the *wall* p50 as
+19.58 ms, which is the full predict-to-actions call and the number that reproduces
+across machines (we measured their wall at 19.50-19.84 ms on three different 5090
+pods). The internal/wall split is host- and staging-dependent, so all headline
+comparisons here use the wall boundary. Measured under one definition in one
+process on one 5090 (`benchmarks/pi05/hybrid_e2e.py`, `boundary_results.json`):
+
+| boundary | FlashRT FP8 | hybrid |
+|---|---|---|
+| internal (staging + graph + readback) | 19.41 ms (17.58 published) | **19.28 ms** |
+| wall (predict -> actions) | 19.50 ms (19.58 published) | **19.38 ms** |
+
+The hybrid leads at both boundaries; the wall margin varies ~0.1-0.8 ms across pods
+(host noise) with a consistent sign.
+
 ## Files
 
 | file | what it is |
