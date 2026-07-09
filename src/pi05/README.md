@@ -37,6 +37,14 @@ process on one 5090 (`benchmarks/pi05/hybrid_e2e.py`, `boundary_results.json`):
 The hybrid leads at both boundaries; the wall margin varies ~0.1-0.8 ms across pods
 (host noise) with a consistent sign.
 
+Direct replication attempt of the 17.58 figure (their stack, their code, their
+internal metric, their documented config — FP8, 2-view, cache_frames=1 — on a
+verified full 5090 + CUDA 13): internal p50 = 19.57 ms (min 18.33), wall p50 =
+20.03 ms. Across four 5090-class pods their wall consistently reproduces
+(19.50-20.03 vs 19.58 published); their internal lands at 19.4-19.6 and never near
+17.58 — the delta matches the host-side staging inside their internal window, which
+is machine-dependent.
+
 ## Files
 
 | file | what it is |
