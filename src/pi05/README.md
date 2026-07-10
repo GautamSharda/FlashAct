@@ -1,4 +1,4 @@
-# π0.5 Megakernel — fastest verified end-to-end π0.5 on RTX 5090
+# π0.5 Megakernel
 
 The entire 10-step flow-matching denoise loop of π0.5's action expert (18-layer
 Gemma-300M: adaRMS time conditioning, MQA attention, MLP, Euler updates) runs as

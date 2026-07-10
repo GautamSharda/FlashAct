@@ -1,0 +1,9 @@
+[submodule "third_party/openpi"]
+	path = third_party/openpi
+	url = https://github.com/Physical-Intelligence/openpi.git
+[submodule "third_party/FlashRT"]
+	path = third_party/FlashRT
+	url = https://github.com/LiangSu8899/FlashRT.git
+[submodule "third_party/RLinf"]
+	path = third_party/RLinf
+	url = https://github.com/RLinf/RLinf.git
