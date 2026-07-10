@@ -87,7 +87,7 @@ bash chunked_eval.sh flashrt            # baseline
 HYBRID=1 bash chunked_eval.sh hybrid    # ours
 ```
 
-## Key handoff detail
+## Note
 
 FlashRT stores K with interleaved RoPE pairs `(2d, 2d+1)`; openpi/HF use split-half
 `(d, d+128)`. The kernel prologue de-interleaves (verified against bf16 ground truth,
