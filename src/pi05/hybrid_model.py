@@ -1,8 +1,11 @@
-"""Hybrid pi0.5 model with FlashRT-compatible predict() API:
-FlashRT FP8 front-end (encoder-only CUDA graph) + our single-kernel megakernel loop.
-Drop-in for flash_rt.load_model in LIBERO eval."""
+"""Hybrid pi0.5 model with a FlashRT-compatible ``predict`` API.
+
+The default arguments preserve the LIBERO deployment.  SO100 uses the same
+implementation with a 16-token action horizon, raw normalized outputs, and a
+checkpoint-specific action-expert weight source.
+"""
 _HERE = __import__('os').path.dirname(__import__('os').path.abspath(__file__))
-import ctypes, sys
+import ctypes, pathlib, sys
 import numpy as np
 import torch
 
@@ -17,17 +20,46 @@ device = torch.device("cuda")
 
 
 class HybridPi05:
-    def __init__(self, checkpoint):
+    def __init__(self, checkpoint, *, weights=None, chunk_size=10, num_steps=10,
+                 output_dim=7, return_raw=False, initial_noise_mode="gaussian",
+                 initial_noise_scale=1.0, state_in_prompt=True):
+        self.chunk_size = int(chunk_size)
+        self.num_steps = int(num_steps)
+        self.output_dim = int(output_dim)
+        self.return_raw = bool(return_raw)
+        self.initial_noise_mode = str(initial_noise_mode)
+        self.initial_noise_scale = float(initial_noise_scale)
+        self.state_in_prompt = bool(state_in_prompt)
+        if not 1 <= self.chunk_size <= T:
+            raise ValueError(f"chunk_size must be in [1, {T}], got {self.chunk_size}")
+        if self.initial_noise_mode not in {"gaussian", "zero", "scale"}:
+            raise ValueError(f"unsupported initial noise mode: {self.initial_noise_mode}")
+        checkpoint = pathlib.Path(checkpoint)
+        self.weight_source = pathlib.Path(
+            weights or __import__('os').environ.get("MK_WEIGHTS", checkpoint / "model.safetensors")
+        )
         from torch.utils.cpp_extension import load as _load
         HERE = _HERE
         self.ext = _load(name="mk_v6", sources=[f"{HERE}/binding.cpp", f"{HERE}/mk6.cu"],
                          extra_cuda_cflags=["-O3", "--use_fast_math",
-                                            "-gencode=arch=compute_120,code=sm_120"], verbose=False)
+                                            "-gencode=arch=compute_120,code=sm_120"],
+                         extra_include_paths=[
+                             "/usr/local/lib/python3.12/dist-packages/nvidia/cu13/include"
+                         ],
+                         verbose=False)
         self._pack_weights()
-        import flash_rt
-        self.inner = flash_rt.load_model(checkpoint, framework="torch", config="pi05",
-                                         hardware="auto", num_views=2, num_steps=10,
-                                         cache_frames=1, use_fp8=True)
+        from flash_rt.api import VLAModel
+        from flash_rt.frontends.torch.pi05_rtx import Pi05TorchFrontendRtx
+        frontend = Pi05TorchFrontendRtx(
+            checkpoint,
+            num_views=2,
+            chunk_size=self.chunk_size,
+            num_steps=self.num_steps,
+            cache_frames=1,
+            use_fp8=True,
+            hardware="rtx_sm120",
+        )
+        self.inner = VLAModel(frontend, "torch")
         self.fe = getattr(self.inner, "_frontend", self.inner)
         if not hasattr(self.fe, "pipeline"):
             self.fe = getattr(self.inner, "_pipe", self.inner)
@@ -40,8 +72,22 @@ class HybridPi05:
 
     def _pack_weights(self):
         from openpi.models_pytorch.pi0_pytorch import create_sinusoidal_pos_embedding
-        sd = torch.load(__import__('os').environ.get("MK_WEIGHTS", "/network_volume/megakernels/pi05/weights/pi05_libero_merged_fp32.pt"),
-                        map_location="cpu", weights_only=True)
+        if self.weight_source.suffix == ".safetensors":
+            from safetensors import safe_open
+            handle = safe_open(str(self.weight_source), framework="pt", device="cpu")
+
+            class SafeTensorWeights:
+                def __getitem__(self, key):
+                    return handle.get_tensor(key)
+
+            sd = SafeTensorWeights()
+        else:
+            sd = torch.load(
+                self.weight_source,
+                map_location="cpu",
+                mmap=True,
+                weights_only=True,
+            )
         P = "paligemma_with_expert.gemma_expert.model.layers."
         def stack(n): return torch.stack([sd[P + str(i) + "." + n].to(device) for i in range(NL)])
         wq, wk, wv = stack("self_attn.q_proj.weight"), stack("self_attn.k_proj.weight"), stack("self_attn.v_proj.weight")
@@ -59,13 +105,17 @@ class HybridPi05:
             return q.view(torch.uint8).contiguous(), s.float().contiguous()
         self.w1q, self.s1 = quant(w1); self.woq, self.so_ = quant(wo)
         self.w2q, self.s2 = quant(w2); self.w3q, self.s3 = quant(wdn)
-        tt = torch.tensor([1.0 - i * 0.1 for i in range(10)], dtype=torch.float32, device=device)
+        tt = torch.tensor(
+            [1.0 - i / self.num_steps for i in range(self.num_steps)],
+            dtype=torch.float32,
+            device=device,
+        )
         temb = create_sinusoidal_pos_embedding(tt, D, min_period=4e-3, max_period=4.0, device=device).float()
         def lin(x, wn, bn):
             return torch.nn.functional.linear(x, sd[wn].float().to(device), sd[bn].float().to(device))
         xa = torch.nn.functional.silu(lin(temb, "time_mlp_in.weight", "time_mlp_in.bias"))
         cond = torch.nn.functional.silu(lin(xa, "time_mlp_out.weight", "time_mlp_out.bias"))
-        mods = torch.zeros(10, NL, 2, 3072, dtype=torch.float32, device=device)
+        mods = torch.zeros(self.num_steps, NL, 2, 3072, dtype=torch.float32, device=device)
         for i in range(NL):
             mods[:, i, 0] = lin(cond, P + f"{i}.input_layernorm.dense.weight", P + f"{i}.input_layernorm.dense.bias")
             mods[:, i, 1] = lin(cond, P + f"{i}.post_attention_layernorm.dense.weight",
@@ -128,14 +178,14 @@ class HybridPi05:
         self.scores = torch.zeros(H, T, self.Lmax, dtype=torch.float32, device=device)
         self.probs = torch.zeros(H, T, self.Lmax, dtype=torch.float16, device=device)
         self.sc_cyc = torch.zeros(16, dtype=torch.int64, device=device)
-        self.nstage = torch.empty(TV, AD, dtype=torch.bfloat16, device=device)
+        self.nstage = torch.empty(self.chunk_size, AD, dtype=torch.bfloat16, device=device)
         self.norm_stats = self.fe.norm_stats
         self._pipe_id = (id(pipe), prompt_len)
 
     def predict(self, images, prompt, state=None, **kw):
         import time as _t
         t0 = _t.perf_counter()
-        if state is None:
+        if state is None and self.state_in_prompt:
             state = np.zeros(8, dtype=np.float32)
         out = self.inner.predict(images, prompt, state=state)
         pipe = self.fe.pipeline
@@ -152,22 +202,27 @@ class HybridPi05:
                                      ctypes.c_void_p(self.vbase), NL * self.kstride, 3, cp)
         self._cudart.cudaMemcpyAsync(ctypes.c_void_p(self.nstage.data_ptr()),
                                      ctypes.c_void_p(int(pipe.bufs["diffusion_noise"].ptr.value)),
-                                     TV * AD * 2, 3, cp)
+                                     self.chunk_size * AD * 2, 3, cp)
         Lp = self.Lp
         self.x_t.zero_()
-        self.x_t[:TV] = self.nstage.float()
+        if self.initial_noise_mode == "gaussian":
+            self.x_t[:self.chunk_size] = self.nstage.float()
+        elif self.initial_noise_mode == "scale":
+            self.x_t[:self.chunk_size] = self.nstage.float() * self.initial_noise_scale
         self.ext.launch(self.w1q, self.woq, self.w2q, self.w3q, self.s1, self.so_, self.s2, self.s3,
                         self.mods, self.modf, self.cos, self.sin,
                         self.w_ain, self.b_ain, self.w_aout, self.b_aout,
                         self.kraw, self.vraw, self.rows,
-                        self.kcache, self.vtcache, Lp, self.Lmax, 10, TV,
+                        self.kcache, self.vtcache, Lp, self.Lmax, self.num_steps, self.chunk_size,
                         self.x_t, self.xb, self.xp, self.sc_cyc,
                         self.xn, self.qb, self.attnb, self.hmlp, self.scores, self.probs, NB, NT)
-        raw = self.x_t[:TV].float().cpu().numpy()
+        raw = self.x_t[:self.chunk_size].float().cpu().numpy()
+        self.latency_records.append((_t.perf_counter() - t0) * 1000)
+        if self.return_raw:
+            return raw
         from flash_rt.core.utils.actions import unnormalize_actions, LIBERO_ACTION_DIM
         unnorm = np.asarray(unnormalize_actions(raw, self.norm_stats))
-        self.latency_records.append((_t.perf_counter() - t0) * 1000)
-        return unnorm[:, :LIBERO_ACTION_DIM]
+        return unnorm[:, :self.output_dim]
 
 
 def load_model(checkpoint, **kw):
