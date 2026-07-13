@@ -40,12 +40,15 @@ class HybridPi05:
         )
         from torch.utils.cpp_extension import load as _load
         HERE = _HERE
+        cuda_include = (
+            pathlib.Path(torch.__file__).resolve().parent.parent
+            / "nvidia" / "cu13" / "include"
+        )
+        extra_include_paths = [str(cuda_include)] if cuda_include.exists() else []
         self.ext = _load(name="mk_v6", sources=[f"{HERE}/binding.cpp", f"{HERE}/mk6.cu"],
                          extra_cuda_cflags=["-O3", "--use_fast_math",
                                             "-gencode=arch=compute_120,code=sm_120"],
-                         extra_include_paths=[
-                             "/usr/local/lib/python3.12/dist-packages/nvidia/cu13/include"
-                         ],
+                         extra_include_paths=extra_include_paths,
                          verbose=False)
         self._pack_weights()
         from flash_rt.api import VLAModel
